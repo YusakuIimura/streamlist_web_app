@@ -8,40 +8,52 @@ st.title('Molkky得点管理アプリ')
 # セッションステート変数の初期化（current_rowを含む）
 if 'page' not in st.session_state:
     st.session_state.page = 'setup'
-    st.session_state.current_cell = {'A': 0, 'B': 0, 'C': 0}
-    st.session_state.current_row = 0  # ここでcurrent_rowを初期化
+    st.session_state.current_row = 0
 
 if st.session_state.page == 'setup':
-    with st.form("setup_form"):
-        col1_name = st.text_input("列1の名前", value='col1', key='col1')
-        col2_name = st.text_input("列2の名前", value='col2', key='col2')
-        col3_name = st.text_input("列3の名前", value='col3', key='col3')
-        col4_name = st.text_input("列4の名前", value='col4', key='col4')
-        col5_name = st.text_input("列5の名前", value='col5', key='col5')
-        col6_name = st.text_input("列6の名前", value='col6', key='col6')
-        submitted = st.form_submit_button("列名を設定して得点管理を開始")
+    with st.form("team_member_form"):
+        # チーム数とメンバー数の入力（ウィジェットのキーを直接使用）
+        num_teams = st.number_input("チーム数を入力してください", min_value=1, value=3, step=1)
+        members_per_team = st.number_input("各チームのメンバー数を入力してください", min_value=1, value=2, step=1)
+        submit_team_member = st.form_submit_button("次へ")
+        st.session_state.num_teams = num_teams
+        st.session_state.members_per_team = members_per_team
 
-    if submitted:
-        # 列名をセッションステートに格納
-        st.session_state.col_names = [col1_name, col2_name, '計A', col3_name, col4_name, '計B', col5_name, col6_name, '計C']
-        st.session_state.page = 'manage_scores'
-        # DataFrameの初期化
-        custom_index = [f"{i+1}投目" for i in range(15)]
+        if submit_team_member:
+            # ウィジェットの値を`st.session_state`から直接使用
+            num_teams = st.session_state.num_teams
+            members_per_team = st.session_state.members_per_team
+            # 次のステップへ移動
+            st.session_state.page = 'input_names'
 
-        # DataFrameの初期化時にカスタムインデックスを指定
-        st.session_state.df = pd.DataFrame(np.nan, index=custom_index, columns=st.session_state.col_names)
+elif st.session_state.page == 'input_names':
+    num_teams = st.session_state.num_teams
+    members_per_team = st.session_state.members_per_team
+    with st.form("names_form"):
+        # プレイヤー名の入力フィールドを動的に生成
+        player_names = []
+        for team_num in range(1, num_teams + 1):
+            for member_num in range(1, members_per_team + 1):
+                name = st.text_input(f"チーム{team_num}-{member_num}人目の名前", key=f'team{team_num}_member{member_num}')
+                player_names.append(name)
+        submit_names = st.form_submit_button("列名を設定して得点管理を開始")
         
+        if submit_names:
+            # プレイヤー名をセッションステートに格納し、列名を生成
+            st.session_state.player_names = player_names
+            col_names = []
+            for i, name in enumerate(player_names, start=1):
+                col_names.append(name)
+                if i % st.session_state.members_per_team == 0:  # 各チームの最後のメンバー後に合計列を追加
+                    col_names.append(f'計{i // st.session_state.members_per_team}')
+            
+            st.session_state.col_names = col_names
+            st.session_state.page = 'manage_scores'
+            # DataFrameの初期化
+            custom_index = [f"{i+1}投目" for i in range(15)]
+            st.session_state.df = pd.DataFrame(np.nan, index=custom_index, columns=st.session_state.col_names)
 
 elif st.session_state.page == 'manage_scores':
-    st.header('得点管理')
-    # ここで得点管理の処理を記述
-     
-    teams = {'A': [st.session_state.col_names[0], st.session_state.col_names[1]], 
-             'B': [st.session_state.col_names[3], st.session_state.col_names[4]], 
-             'C': [st.session_state.col_names[6], st.session_state.col_names[7]]}
-    sum_columns = {'A': '計A', 'B': '計B', 'C': '計C'}
-    value_options = [str(i) for i in range(13)] + ['miss']
-    
     def check_teams_input_completed():
         # 全チームが現在の行に対して少なくとも一つの得点またはmissを入力したかチェック
         all_teams_completed = True
@@ -64,8 +76,8 @@ elif st.session_state.page == 'manage_scores':
                 # 現在の列インデックスを更新して、次の行で交互の列が選択されるようにする
                 st.session_state.current_cell[team] = (st.session_state.current_cell[team] + 1) % len(teams[team])
         
-
     def update_score_and_move_next(team, col, value):
+        
         # 現在の行ラベルを取得
         current_row_label = st.session_state.df.index[st.session_state.current_row]
 
@@ -95,25 +107,27 @@ elif st.session_state.page == 'manage_scores':
 
             check_teams_input_completed()
 
+    st.header(f'{st.session_state.num_teams}チーム　{st.session_state.members_per_team}人戦')
+    # ここで得点管理の処理を記述
+    
+    # チームと列の動的定義
+    teams = {f'チーム{i+1}': st.session_state.col_names[i * (st.session_state.members_per_team + 1):(i + 1) * (st.session_state.members_per_team + 1) - 1] for i in range(st.session_state.num_teams)}
+    sum_columns = {f'チーム{i+1}': st.session_state.col_names[(i + 1) * (st.session_state.members_per_team + 1) - 1] for i in range(st.session_state.num_teams)}
+    value_options = [str(i) for i in range(13)] + ['miss']
+    st.session_state.current_cell = {team: 0 for team in teams}
 
+    # チームごとに列を動的に生成
+    cols = st.columns(st.session_state.num_teams)
 
-    # チームごとの得点入力欄を横に並べる
-    col_a, col_b, col_c = st.columns(3)
-    # 各チームごとに処理
-    for team in teams:
-        current_col = teams[team][st.session_state.current_cell[team]]
-        with {'A': col_a, 'B': col_b, 'C': col_c}[team]:
-            st.write(f"チーム{team}: {st.session_state.current_row + 1}行目, {current_col}")
-            # カスタムインデックスラベルを取得
-            current_index_label = st.session_state.df.index[st.session_state.current_row]
-
-            # カスタムインデックスラベルを使用してセルの値にアクセス
-            current_value = st.session_state.df.at[current_index_label, current_col]
-            # current_value = st.session_state.df.at[st.session_state.current_row, current_col]
-            value_selection = st.selectbox(f'{current_col}の値', value_options, index=value_options.index(str(current_value)) if current_value in value_options else 0, key=f'{team}_{st.session_state.current_row}_{current_col}')
-
-            if st.button(f'Update {team}', key=f'update_{team}_{st.session_state.current_row}'):
-                update_score_and_move_next(team, current_col, value_selection)
+    for idx, (team, team_cols) in enumerate(teams.items()):
+        with cols[idx]:
+            st.write(f"{team}: {st.session_state.df.index[st.session_state.current_row]}行目")
+            for col in team_cols:
+                current_index_label = st.session_state.df.index[st.session_state.current_row]
+                current_value = st.session_state.df.at[current_index_label, col]
+                value_selection = st.selectbox(f'{col}の値', value_options, index=value_options.index(str(current_value)) if current_value in value_options else 0, key=f'{team}_{col}_{st.session_state.current_row}')
+                if st.button(f'{col} 得点記入', key=f'update_{team}_{col}_{st.session_state.current_row}'):
+                    update_score_and_move_next(team, col, value_selection)
 
     # 表の表示
     st.dataframe(st.session_state.df)
