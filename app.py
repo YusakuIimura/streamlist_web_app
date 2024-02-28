@@ -2,6 +2,13 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import os
+from PIL import Image
+
+image = Image.open('emc.png')
+st.set_page_config(
+    page_title='Molkky得点管理アプリ', 
+    page_icon=image,)
+
 
 st.title('Molkky得点管理アプリ')
 
